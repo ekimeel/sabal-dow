@@ -64,7 +64,7 @@ func (dao *dao) insert(dow *DayOfWeek) (uint32, error) {
 	return uint32(id), nil
 }
 
-func (dao *dao) selectByPointIdAndWeekday(pointId uint32, weekday Weekday) (*DayOfWeek, error) {
+func (dao *dao) selectByPointIdAndWeekday(pointId uint32, weekday time.Weekday) (*DayOfWeek, error) {
 	dow := &DayOfWeek{}
 	err := db.QueryRow(sqlSelectByPointAndWeekday, pointId, weekday).Scan(
 		&dow.Id,
