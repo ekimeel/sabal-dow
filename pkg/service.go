@@ -2,12 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"github.com/ekimeel/sabal-pb/pb"
-	"github.com/ekimeel/sabal-plugin/pkg/plugin"
 	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"math"
 	"sync"
 	"time"
@@ -32,13 +29,13 @@ func getService() *service {
 	return singletonService
 }
 
-func (s *service) doCalc(point *pb.Point, data []*pb.Metric, weekday Weekday) {
+func (s *service) doCalc(point *pb.Point, data []*pb.Metric, weekday time.Weekday) {
 
 	if len(data) == 0 {
 		return
 	}
 
-	existing, err := s.dao.selectAllByPointIdAndWeekday(point.Id, weekday)
+	existing, err := s.dao.selectByPointIdAndWeekday(point.Id, weekday)
 	if err != nil {
 		log.Error(err)
 		return
@@ -127,70 +124,43 @@ func (s *service) doCalc(point *pb.Point, data []*pb.Metric, weekday Weekday) {
 
 }
 
-func (s *service) run(offset *plugin.Offset) error {
+func (s *service) run(ctx context.Context, metrics []*pb.Metric) error {
 
-	req := &pb.ListRequest{Limit: 1000, Offset: 0}
-	res, err := pointServiceClient.GetAll(context.Background(), req)
+	unitOfWork := GroupMetricsByPointId(metrics)
+	var wg sync.WaitGroup
+	var errOnce sync.Once
+	var err error
 
-	if err != nil {
-		log.Warn("failed to get points")
-		return errors.New("no points")
-	}
+	for pointId, items := range unitOfWork {
+		wg.Add(1)
+		go func(pointId uint32, items []*pb.Metric) {
+			defer wg.Done()
 
-	for i := range res.Points {
-		point := res.Points[i]
-
-		r := &pb.MetricRequest{
-			PointId: point.Id,
-			From:    timestamppb.New(offset.Value),
-			To:      timestamppb.New(time.Unix(1<<63-1, 0)),
-		}
-
-		data, err := metricServiceClient.Select(context.Background(), r)
-		if err != nil {
-			log.Errorf("failed to read data for point id:%d, from:%s, to:%s err: %s", point.Id, r.From, r.To, err)
-			continue
-		}
-
-		mon := make([]*pb.Metric, 0)
-		tue := make([]*pb.Metric, 0)
-		wed := make([]*pb.Metric, 0)
-		thr := make([]*pb.Metric, 0)
-		fri := make([]*pb.Metric, 0)
-		sat := make([]*pb.Metric, 0)
-		sun := make([]*pb.Metric, 0)
-
-		for j := range data.Metrics {
-			d := data.Metrics[j]
-			switch d.Timestamp.AsTime().Weekday() {
-			case time.Monday:
-				mon = append(mon, d)
-			case time.Tuesday:
-				tue = append(tue, d)
-			case time.Wednesday:
-				wed = append(wed, d)
-			case time.Thursday:
-				thr = append(thr, d)
-			case time.Friday:
-				fri = append(fri, d)
-			case time.Saturday:
-				sat = append(sat, d)
-			case time.Sunday:
-				sun = append(sun, d)
+			point, err := pointServiceClient.Get(ctx, &pb.PointId{Id: pointId})
+			if err != nil {
+				log.Errorf("error finding point with id: %d", pointId)
+				errOnce.Do(func() { err = err })
+				return
 			}
-		}
+			if point == nil {
+				log.Warnf("unknown point id: %d", pointId)
+				return
+			}
 
-		s.doCalc(point, mon, Monday)
-		s.doCalc(point, tue, Tuesday)
-		s.doCalc(point, wed, Wednesday)
-		s.doCalc(point, thr, Thursday)
-		s.doCalc(point, fri, Friday)
-		s.doCalc(point, sat, Saturday)
-		s.doCalc(point, sun, Sunday)
+			days := make(map[time.Weekday][]*pb.Metric)
+			for _, metric := range items {
+				day := metric.Timestamp.AsTime().Weekday()
+				days[day] = append(days[day], metric)
+			}
 
+			for day, metrics := range days {
+				s.doCalc(point, metrics, day)
+			}
+		}(pointId, items)
 	}
 
-	return nil
+	wg.Wait()
+	return err
 }
 
 func weightedAverage(value1, weight1, value2, weight2 float64) float64 {

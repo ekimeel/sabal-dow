@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/ekimeel/sabal-pb v0.1.9
-	github.com/ekimeel/sabal-plugin v0.1.15
+	github.com/ekimeel/sabal-plugin v0.1.16
 	github.com/mattn/go-sqlite3 v1.14.17
 	github.com/sirupsen/logrus v1.9.3
 	google.golang.org/protobuf v1.31.0

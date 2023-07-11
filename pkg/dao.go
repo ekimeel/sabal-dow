@@ -8,12 +8,12 @@ import (
 )
 
 var (
-	singletonDao                  *dao
-	onceDao                       sync.Once
-	sqlInsert                     = "INSERT INTO plugin_day_of_week (point_id, last_updated, start_time, end_time, evals, day_of_week, mean, max, min, sum, count, std_dev) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	sqlSelectAllByPoint           = "SELECT point_id, last_updated, start_time, end_time, evals, day_of_week, mean, max, min, sum, count, std_dev FROM plugin_day_of_week WHERE point_id = ?"
-	sqlSelectAllByPointAndWeekday = "SELECT id, point_id, day_of_week, last_updated, start_time, end_time, evals, mean, max, min, sum, count, std_dev FROM plugin_day_of_week WHERE point_id = ? AND day_of_week = ?"
-	sqlUpdate                     = "UPDATE plugin_day_of_week SET last_updated = ?, start_time = ?, end_time = ?, evals = ?, mean = ?, max = ?, min = ?, sum = ?, count = ?, std_dev = ? WHERE id = ?"
+	singletonDao               *dao
+	onceDao                    sync.Once
+	sqlInsert                  = "INSERT INTO plugin_day_of_week (point_id, last_updated, start_time, end_time, evals, day_of_week, mean, max, min, sum, count, std_dev) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	sqlSelectAllByPoint        = "SELECT point_id, last_updated, start_time, end_time, evals, day_of_week, mean, max, min, sum, count, std_dev FROM plugin_day_of_week WHERE point_id = ?"
+	sqlSelectByPointAndWeekday = "SELECT id, point_id, day_of_week, last_updated, start_time, end_time, evals, mean, max, min, sum, count, std_dev FROM plugin_day_of_week WHERE point_id = ? AND day_of_week = ?"
+	sqlUpdate                  = "UPDATE plugin_day_of_week SET last_updated = ?, start_time = ?, end_time = ?, evals = ?, mean = ?, max = ?, min = ?, sum = ?, count = ?, std_dev = ? WHERE id = ?"
 )
 
 type dao struct {
@@ -64,9 +64,9 @@ func (dao *dao) insert(dow *DayOfWeek) (uint32, error) {
 	return uint32(id), nil
 }
 
-func (dao *dao) selectAllByPointIdAndWeekday(pointId uint32, weekday Weekday) (*DayOfWeek, error) {
+func (dao *dao) selectByPointIdAndWeekday(pointId uint32, weekday Weekday) (*DayOfWeek, error) {
 	dow := &DayOfWeek{}
-	err := db.QueryRow(sqlSelectAllByPointAndWeekday, pointId, weekday).Scan(
+	err := db.QueryRow(sqlSelectByPointAndWeekday, pointId, weekday).Scan(
 		&dow.Id,
 		&dow.PointId,
 		&dow.DayOfWeek,

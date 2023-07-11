@@ -3,7 +3,7 @@ package main
 import "time"
 
 const (
-	pluginName     = "timeQuality"
+	pluginName     = "dow"
 	pluginVersion  = "v1.0"
 	configFilePath = "./ext/time-quality.json"
 
