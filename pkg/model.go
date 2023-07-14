@@ -1,4 +1,4 @@
-package main
+package dow
 
 import (
 	"database/sql"

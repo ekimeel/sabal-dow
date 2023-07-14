@@ -1,4 +1,4 @@
-package main
+package dow
 
 import (
 	"context"
@@ -11,37 +11,38 @@ import (
 )
 
 var (
-	singletonService *service
+	singletonService *Service
 	onceService      sync.Once
 )
 
-type service struct {
-	dao *dao
+type Service struct {
+	dao                *dao
+	PointServiceClient pb.PointServiceClient
 }
 
-func getService() *service {
+func GetService() *Service {
 
 	onceService.Do(func() {
-		singletonService = &service{}
+		singletonService = &Service{}
 		singletonService.dao = getDao()
 	})
 
 	return singletonService
 }
 
-func (s *service) doCalc(point *pb.Point, data []*pb.Metric, weekday time.Weekday) {
+func (s *Service) doCalc(pointId uint32, data []*pb.Metric, weekday time.Weekday) {
 
 	if len(data) == 0 {
 		return
 	}
 
-	existing, err := s.dao.selectByPointIdAndWeekday(point.Id, weekday)
+	existing, err := s.dao.selectByPointIdAndWeekday(pointId, weekday)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 	if existing == nil {
-		existing = &DayOfWeek{PointId: point.Id, DayOfWeek: weekday}
+		existing = &DayOfWeek{PointId: pointId, DayOfWeek: weekday}
 		existing.Id, err = s.dao.insert(existing)
 		if err != nil {
 			log.Error(err)
@@ -124,28 +125,16 @@ func (s *service) doCalc(point *pb.Point, data []*pb.Metric, weekday time.Weekda
 
 }
 
-func (s *service) run(ctx context.Context, metrics []*pb.Metric) error {
+func (s *Service) Run(ctx context.Context, metrics []*pb.Metric) error {
 
 	unitOfWork := GroupMetricsByPointId(metrics)
 	var wg sync.WaitGroup
-	var errOnce sync.Once
 	var err error
 
 	for pointId, items := range unitOfWork {
 		wg.Add(1)
 		go func(pointId uint32, items []*pb.Metric) {
 			defer wg.Done()
-
-			point, err := pointServiceClient.Get(ctx, &pb.PointId{Id: pointId})
-			if err != nil {
-				log.Errorf("error finding point with id: %d", pointId)
-				errOnce.Do(func() { err = err })
-				return
-			}
-			if point == nil {
-				log.Warnf("unknown point id: %d", pointId)
-				return
-			}
 
 			days := make(map[time.Weekday][]*pb.Metric)
 			for _, metric := range items {
@@ -154,7 +143,7 @@ func (s *service) run(ctx context.Context, metrics []*pb.Metric) error {
 			}
 
 			for day, metrics := range days {
-				s.doCalc(point, metrics, day)
+				s.doCalc(pointId, metrics, day)
 			}
 		}(pointId, items)
 	}
